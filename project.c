@@ -4,7 +4,7 @@
     NOTES:
 
     TODO: REMEMBER TO DELETE ANY PRINT STATEMENTS WITH [DEBUG] IN THEM AT THE END (or something at the beginning of it)
-
+    
     * Remember if there's any sort of debugging you want to do remember to put [DEBUG] or something like that so we know to delete them before submitting
 
     * I made sure to add lots of comments to help you understand the code a bit better lol
@@ -14,6 +14,41 @@
 /* 10 Points */
 void ALU(unsigned A, unsigned B, char ALUControl, unsigned *ALUresult, char *Zero)
 {
+    switch (ALUControl){
+        case 0: // addition
+            *ALUresult = A+B;
+            break;
+        case 1: // subtraction
+            *ALUresult = A-B;
+            break;
+        case 2: // compare as signed
+            if ((int)A < (int)B)
+                *ALUresult = 1;
+            else *ALUresult = 0;
+            break;
+        case 3: // compare as unsigned
+            if (A < B)
+                *ALUresult = 1;
+            else *ALUresult = 0;
+            break;
+        case 4: // AND operation
+            *ALUresult = A&B;
+            break;
+        case 5: // OR operation
+            *ALUresult = A|B;
+            break;
+        case 6: // Shift B left by 16 bits
+            *ALUresult = B << 16;
+            break;
+        case 7: // Not operation on A
+            *ALUresult = ~A;
+            break;
+        default:
+            break;
+    }
+    // set 0 flag
+    if (*ALUresult==0) *Zero = 1;
+    else *Zero = 0;
 }
 
 /* instruction fetch */
@@ -85,76 +120,6 @@ void instruction_partition(unsigned instruction, unsigned *op, unsigned *r1, uns
 /* 15 Points */
 int instruction_decode(unsigned op, struct_controls *controls)
 {
-    // decode the op to tell the control what to do
-
-    // if the op is addi
-    if (op == 8)
-    {
-        // we're not writing or reading anything so don't enable them
-        controls->MemRead = 0;
-        controls->MemWrite = 0;
-
-        // enable register write since we are writing to the register
-        controls->RegWrite = 1;
-
-        controls->RegDst = 0;
-        controls->MemtoReg = 0;
-        controls->ALUSrc = 1;
-
-        // tell the alu to do addition since we're adding
-        controls->ALUOp = 0;
-    }
-
-    // if the op is lw
-    else if (op == 35)
-    {
-
-        // you read from memory to load into register
-        controls->MemRead = 1;
-        controls->MemWrite = 0;
-        controls->RegWrite = 1;
-    }
-
-    // if the op is sw
-    else if (op == 43)
-    {
-        // you write from register and put it in memory (so you don't have to read from memory or write any registers)
-        controls->MemRead = 0;
-        controls->MemWrite = 1;
-        controls->RegWrite = 0;
-    }
-
-    // if the op is lui (load upper immediate)
-    else if (op == 15)
-    {
-    }
-
-    // if the op is beq (branch equal)
-    else if (op == 4)
-    {
-    }
-
-    // if the op is slti (set less than immediate)
-    else if (op == 10)
-    {
-    }
-
-    // if the op is sltiu (set less than immediate unsigned)
-    else if (op == 11)
-    {
-    }
-
-    // if the op is j (jump)
-    else if (op == 2)
-    {
-    }
-
-    // the rest of the r-type instructions
-    else if (op == 0)
-    {
-        controls->ALUOp = 7;
-    }
-
     return 0;
 }
 
@@ -198,6 +163,45 @@ void sign_extend(unsigned offset, unsigned *extended_value)
 /* 10 Points */
 int ALU_operations(unsigned data1, unsigned data2, unsigned extended_value, unsigned funct, char ALUOp, char ALUSrc, unsigned *ALUresult, char *Zero)
 {
+    // check if the operator is acceptable and not R-type
+    if (ALUOp < 7 && ALUOp >= 0) {
+        // check if the extended value has to be used
+        if (ALUSrc == 1) ALU(data1, extended_value, ALUOp, ALUresult, Zero);
+        // if not, use regular data2
+        else if (ALUSrc == 0) ALU(data1, data2, ALUOp, ALUresult, Zero);  
+        // ALUSrc was invalid, halt
+        else return 1; 
+    } 
+    // check if we need R-types now
+    else if (ALUOp == 7) {
+        // switch case to handle each funct code and perform the corresponding operation
+        switch(funct) {
+            case 32:
+                ALU(data1, data2, 0, ALUresult, Zero);
+                break;
+            case 34:
+                ALU(data1, data2, 1, ALUresult, Zero);
+                break;
+            case 36:
+                ALU(data1, data2, 4, ALUresult, Zero);
+                break;
+            case 37:
+                ALU(data1, data2, 5, ALUresult, Zero);
+                break;
+            case 42:
+                ALU(data1, data2, 2, ALUresult, Zero);
+                break;
+            case 43:
+                ALU(data1, data2, 3, ALUresult, Zero);
+                break;
+            default:
+                return 1; 
+        }
+    } 
+    // invalid ALU0p, halt
+    else return 1;
+
+    // everything went well
     return 0;
 }
 
@@ -212,31 +216,22 @@ int rw_memory(unsigned ALUresult, unsigned data2, char MemWrite, char MemRead, u
 /* 10 Points */
 void write_register(unsigned r2, unsigned r3, unsigned memdata, unsigned ALUresult, char RegWrite, char RegDst, char MemtoReg, unsigned *Reg)
 {
-    // Write the data (ALUresult or memdata) to a register (Reg) addressed by r2 or r3
     /* if regdst = 0, dest in r2 ; if it = 1, dest is r3
     which data? if memtoreg = 1, write memdata
     if regwrite = 0, no data, if 1, proceed
     */
 
-    if (RegWrite == 0)
-    { // do nothing
+    if(RegWrite == 0){// do nothing
         return;
     }
-    else if (RegWrite == 1)
-    {
-        if (MemtoReg == 1)
-        { // you write memdata
-            if (RegDst == 0)
-                Reg[r2] = memdata;
-            else if (RegDst == 1)
-                Reg[r3] = memdata;
+    else if(RegWrite == 1){
+        if(MemtoReg == 1){// you write memdata
+            if(RegDst == 0) Reg[r2] = memdata;
+            else if(RegDst == 1) Reg[r3] = memdata;
         }
-        else if (MemtoReg == 0)
-        { // you write ALU result
-            if (RegDst == 0)
-                Reg[r2] = ALUresult;
-            else if (RegDst == 1)
-                Reg[r3] = ALUresult;
+        else if(MemtoReg == 0){// you write ALU result
+            if(RegDst == 0) Reg[r2] = ALUresult;
+            else if(RegDst == 1) Reg[r3] = ALUresult;
         }
     }
 }
